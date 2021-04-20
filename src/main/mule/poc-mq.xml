@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:anypoint-mq="http://www.mulesoft.org/schema/mule/anypoint-mq" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/anypoint-mq http://www.mulesoft.org/schema/mule/anypoint-mq/current/mule-anypoint-mq.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<anypoint-mq:config name="Anypoint_MQ_Config" doc:name="Anypoint MQ Config" doc:id="d41e829b-131a-4bb0-ac4f-85b67a60f67a" >
+		<anypoint-mq:connection clientId="dc88a6c78760459da8cd5e1d29f81ee1" clientSecret="49411E99c42D48c88C674F3786b62c3c" />
+	</anypoint-mq:config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="35627237-aa20-4366-b477-c16513f381ec" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="fadb679e-82af-4ec7-a90d-ff598a5a10d2" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="root" database="mq" />
+	</db:config>
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="b484d39b-587d-4b1e-911e-07f22f149c46" >
+		<salesforce:basic-connection username="krsinghvinod193@gmail.com" password="Vinod123@" securityToken="ld34YSN2hvrEuKI9dHjzPE8w5" />
+	</salesforce:sfdc-config>
+	<flow name="AnypointMQPublishflow" doc:id="624ffdb0-e9ce-4ebc-a4bb-43de4ba3fff9" >
+		<http:listener doc:name="Listener" doc:id="560bbd83-3d13-4f1f-b72e-d06c94da4d57" config-ref="HTTP_Listener_config" path="/mq" allowedMethods="POST"/>
+		<logger level="INFO" doc:name="Logger" doc:id="2f4804e9-73a5-444c-b0fe-86338dfa63ff" message="Message to be published : #[payload]"/>
+		<anypoint-mq:publish doc:name="Publish" doc:id="70e4ee48-7953-414d-8a7b-1032611828d2" config-ref="Anypoint_MQ_Config" destination="techmatrix">
+			<anypoint-mq:properties ><![CDATA[#[output application/java
+---
+{
+	"Evn" : "Dev"
+}]]]></anypoint-mq:properties>
+		</anypoint-mq:publish>
+		<logger level="INFO" doc:name="Logger" doc:id="c2cb5b1a-f1e3-4a39-a3b9-392f6af6c502" message="Message Published"/>
+	</flow>
+	<flow name="AnypointMQSubscriberflow" doc:id="35a1fb50-8498-4f10-bdcc-b532ac87db2a" initialState="stopped">
+		<anypoint-mq:subscriber doc:name="Subscriber" doc:id="a2458cf8-de05-4375-bf14-20e8fa351745" config-ref="Anypoint_MQ_Config" destination="techmatrix"/>
+		<logger level="INFO" doc:name="Logger" doc:id="381cf1d4-a091-46b9-9e4b-e327c345d8b6" message="Message recieved : #[payload]"/>
+	</flow>
+	<flow name="poc-mqFlow" doc:id="892dee80-6522-4527-acb0-c8e4d9445183" >
+		<http:listener doc:name="Listener" doc:id="2bff630b-156c-4ee2-b3ac-ae4403373f16" config-ref="HTTP_Listener_config" path="/mqconsumerNack"/>
+		<anypoint-mq:consume doc:name="Consume" doc:id="831d396b-0441-463a-a920-bee749c7f1e6" config-ref="Anypoint_MQ_Config" destination="techmatrix" acknowledgementMode="MANUAL"/>
+		<flow-ref doc:name="call_Process_message" doc:id="da2ea4f5-2d1b-4b93-9ca0-77584e8dbf55" name="Process_message"/>
+		<anypoint-mq:nack doc:name="Nack" doc:id="9169afa3-e025-4c13-a7fd-41204ad1cd3f" config-ref="Anypoint_MQ_Config" ackToken="#[attributes.ackToken]"/>
+		<logger level="INFO" doc:name="Logger" doc:id="72a3d962-dccc-4772-ba52-5d4dfdff51ef" message="ackToken :#[attributes.ackToken] and #[payload]"/>
+		<ee:transform doc:name="Transform Message" doc:id="86f29d7e-3ba7-4f99-a5e3-cc697cca0374" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<try doc:name="Try" doc:id="9f7f7d43-717d-40e5-9e5a-00f9ede4f15a" >
+			<db:bulk-insert doc:name="Bulk insert" doc:id="c9b13461-1ac0-44a0-897a-1d6e9adc84a3" config-ref="Database_Config">
+			<db:sql><![CDATA[insert into Queue (PersonID,LastName,FirstName,Address,City) values (:PersonID,:LastName,:FirstName,:Address,:City);]]></db:sql>
+		</db:bulk-insert>
+		</try>
+		<ee:transform doc:name="Transform Message" doc:id="94a7b514-ca33-4f6b-9d30-08151bdd9865" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message" : "Inserted Data successfully!!!..."
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="d678d31d-3570-416e-8495-278cf1c16bde" type="ANY">
+				<logger level="INFO" doc:name="Logger" doc:id="0f640522-29f3-472c-a148-8b4091307341" message="Databases connectivity Error !!!"/>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<sub-flow name="Process_message" doc:id="bceb508d-091a-400b-96b9-a713bb3683a0" >
+		<logger level="INFO" doc:name="Logger" doc:id="635c8856-2ed0-4f77-92a2-6f446f602c25" message="process message"/>
+	</sub-flow>
+</mule>
